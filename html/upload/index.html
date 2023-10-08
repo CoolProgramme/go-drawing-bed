@@ -4,18 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>图床</title>
-    <link href="/html/libs/filepond/filepond.min.css" rel="stylesheet" />
+    <link href="../libs/filepond/filepond.min.css" rel="stylesheet" />
     <link
-      href="/html/libs/filepond/filepond-plugin-image-preview.min.css"
+      href="../libs/filepond/filepond-plugin-image-preview.min.css"
       rel="stylesheet"
     />
   </head>
   <body>
     <input type="file" id="filepond" class="filepond" name="file" multiple />
 
-    <script src="/html/libs/filepond/filepond-plugin-image-preview.min.js"></script>
-    <script src="/html/libs/filepond/filepond.min.js"></script>
+    <script src="../libs/sweetalert/sweetalert.min.js"></script>
+    <script src="../libs/filepond/filepond-plugin-image-preview.min.js"></script>
+    <script src="../libs/filepond/filepond.min.js"></script>
     <script>
+      const copyContent = async (text) => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (err) {
+          console.error("Failed to copy: ", err);
+        }
+      };
       // Register the plugin
       FilePond.registerPlugin(FilePondPluginImagePreview);
       FilePond.create(document.getElementById("filepond"));
@@ -28,7 +36,16 @@
           fileEle.appendChild(divEle);
         },
         onactivatefile: (file) => {
-          console.log(file.element);
+          if (file.status === 3) {
+            swal("警告", "当前图片正在上传，请稍等~", "warning");
+            return;
+          }
+
+          if (file.status === 5) {
+            const { data } = JSON.parse(file.serverId);
+            copyContent(data.url);
+            swal("图片链接", "图片链接已成功复制！", "success");
+          }
         },
         labelIdle: `拖放文件到此处，或者 <span class="filepond--label-action"> 点击上传 </span>
           <br/>
