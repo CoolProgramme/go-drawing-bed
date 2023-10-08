@@ -1,11 +1,14 @@
 package main
 
 import (
+	"embed"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/h2non/filetype"
 	"github.com/joho/godotenv"
+	"io"
+	"io/fs"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -25,6 +28,9 @@ var Port string
 
 // Url 返回的图片Url前缀
 var Url string
+
+//go:embed html/*
+var htmlFS embed.FS
 
 func init() {
 	err := godotenv.Load()
@@ -59,6 +65,12 @@ func main() {
 
 	// 为 multipart forms 设置较低的内存限制 (默认是 32 MiB)
 	router.MaxMultipartMemory = MaxFileSize // 10 MiB
+
+	// 首页
+	router.GET("/", indexHandler)
+
+	// 前端页面处理
+	router.GET("/html/*filepath", htmlHandler)
 
 	// 上传接口，仅允许上传图片
 	router.POST("/upload", uploadHandler)
@@ -128,4 +140,67 @@ func uploadHandler(context *gin.Context) {
 			},
 		},
 	)
+}
+
+func indexHandler(context *gin.Context) {
+	file, err := htmlFS.Open("html/index.html")
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		// 处理读取文件错误
+		context.Status(http.StatusInternalServerError)
+		return
+	}
+	// 设置响应头，例如 Content-Type
+	contentType := http.DetectContentType(data)
+	// 发送文件内容给客户端
+	context.Data(http.StatusOK, contentType, data)
+}
+
+func htmlHandler(context *gin.Context) {
+	// 获取请求的文件路径
+	filePath := context.Param("filepath")
+
+	// 使用 embed.FS 打开文件
+	file, err := htmlFS.Open("html" + filePath)
+	if err != nil {
+		// 处理文件未找到等错误
+		context.Status(http.StatusNotFound)
+		return
+	}
+	defer func(file fs.File) {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(file)
+
+	// 从文件中读取内容并发送给客户端
+	data, err := io.ReadAll(file)
+	if err != nil {
+		// 处理读取文件错误
+		context.Status(http.StatusInternalServerError)
+		return
+	}
+
+	// 设置响应头，例如 Content-Type
+	contentType := http.DetectContentType(data)
+
+	// 如果文件扩展名是 .min.js，手动设置 Content-Type 为 "application/javascript"
+	if strings.HasSuffix(filePath, ".min.js") {
+		contentType = "text/javascript;charset=UTF-8"
+	}
+
+	// 如果文件扩展名是 .min.css，手动设置 Content-Type 为 "text/css"
+	if strings.HasSuffix(filePath, ".min.css") {
+		contentType = "text/css;charset=UTF-8"
+	}
+
+	context.Header("Content-Type", contentType)
+
+	// 发送文件内容给客户端
+	context.Data(http.StatusOK, contentType, data)
 }
